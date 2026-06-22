@@ -19,6 +19,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .video-area { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 .video-container { flex: 1; background: #000; display: flex; align-items: center; justify-content: center; position: relative; min-height: 0; }
 .video-container video { max-width: 100%; max-height: 100%; display: block; }
+.video-subtitle { position: absolute; bottom: 60px; left: 50%; transform: translateX(-50%); max-width: 80%; text-align: center; pointer-events: none; z-index: 10; opacity: 0; transition: opacity 0.3s; }
+.video-subtitle.show { opacity: 1; }
+.video-subtitle-title { display: inline-block; background: rgba(233,69,96,0.9); color: #fff; padding: 6px 16px; border-radius: 6px; font-size: 16px; font-weight: 600; margin-bottom: 4px; text-shadow: 0 1px 3px rgba(0,0,0,0.5); }
+.video-subtitle-desc { display: inline-block; background: rgba(0,0,0,0.75); color: #fff; padding: 4px 12px; border-radius: 4px; font-size: 13px; margin-top: 4px; backdrop-filter: blur(4px); }
 .video-placeholder { color: #555; font-size: 14px; text-align: center; }
 .video-placeholder .open-btn { display: inline-block; padding: 14px 28px; border: 2px dashed #444; border-radius: 8px; cursor: pointer; margin-top: 12px; transition: all 0.2s; background: none; color: #555; font-size: 14px; font-family: inherit; }
 .video-placeholder .open-btn:hover { border-color: #e94560; color: #e94560; }
@@ -38,6 +42,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .add-kf-btn { width: auto !important; padding: 0 10px !important; font-size: 12px !important; gap: 4px; }
 .add-kf-btn span { font-size: 14px; }
 .screenshot-btn { width: auto !important; padding: 0 10px !important; font-size: 12px !important; margin-left: auto; }
+.export-video-btn { width: auto !important; padding: 0 10px !important; font-size: 12px !important; background: #e94560 !important; color: #fff !important; }
+.export-video-btn:hover { background: #c23152 !important; }
 .volume-group { display: flex; align-items: center; gap: 4px; margin-left: 8px; }
 .volume-group input[type="range"] { width: 60px; accent-color: #e94560; }
 .speed-select { background: #0f3460; color: #e0e0e0; border: 1px solid #1a1a2e; border-radius: 4px; padding: 2px 4px; font-size: 11px; }
@@ -87,6 +93,16 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #e94560; color: #fff; padding: 8px 20px; border-radius: 6px; font-size: 12px; z-index: 200; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
 .toast.show { opacity: 1; }
 
+.export-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8); display: none; align-items: center; justify-content: center; z-index: 300; }
+.export-overlay.show { display: flex; }
+.export-dialog { background: #16213e; border: 1px solid #0f3460; border-radius: 12px; padding: 24px 32px; min-width: 320px; text-align: center; }
+.export-title { font-size: 16px; color: #e94560; font-weight: 600; margin-bottom: 16px; }
+.export-progress-bar { width: 100%; height: 8px; background: #0a0a1a; border-radius: 4px; overflow: hidden; margin-bottom: 12px; }
+.export-progress-fill { height: 100%; background: linear-gradient(90deg, #e94560, #c23152); width: 0%; transition: width 0.3s; border-radius: 4px; }
+.export-status { font-size: 12px; color: #888; margin-bottom: 16px; }
+.export-cancel-btn { padding: 6px 20px; border: 1px solid #0f3460; background: #1a1a2e; color: #e0e0e0; border-radius: 4px; cursor: pointer; font-size: 12px; }
+.export-cancel-btn:hover { background: #e94560; border-color: #e94560; }
+
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #0f3460; border-radius: 3px; }
@@ -114,6 +130,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
         <button class="open-btn" id="openVideoBtn">📁 选择视频文件</button>
       </div>
       <video id="video" style="display:none"></video>
+      <div class="video-subtitle" id="videoSubtitle">
+        <div class="video-subtitle-title" id="subtitleTitle"></div>
+        <div class="video-subtitle-desc" id="subtitleDesc"></div>
+      </div>
     </div>
 
     <div class="timeline-wrapper">
@@ -141,6 +161,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       <button class="screenshot-btn" onclick="takeScreenshot()" title="截图 [S]">
         📸 截图
       </button>
+      <button class="export-video-btn" onclick="exportVideo()" title="导出带字幕的视频">
+        🎬 导出视频
+      </button>
       <div class="volume-group">
         <span style="font-size:12px">🔊</span>
         <input type="range" id="volumeSlider" min="0" max="1" step="0.05" value="1">
@@ -161,6 +184,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       <span><kbd>K</kbd> 添加关键帧</span>
       <span><kbd>[</kbd><kbd>]</kbd> 前后跳转</span>
       <span><kbd>S</kbd> 截图</span>
+      <span><kbd>E</kbd> 导出视频</span>
       <span><kbd>←</kbd><kbd>→</kbd> 快进/退5秒</span>
       <span><kbd>,</kbd><kbd>.</kbd> 逐帧</span>
     </div>
@@ -200,10 +224,22 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 
 <div class="toast" id="toast"></div>
 
+<div class="export-overlay" id="exportOverlay">
+  <div class="export-dialog">
+    <div class="export-title">🎬 正在导出视频...</div>
+    <div class="export-progress-bar">
+      <div class="export-progress-fill" id="exportProgressFill"></div>
+    </div>
+    <div class="export-status" id="exportStatus">准备中...</div>
+    <button class="export-cancel-btn" id="exportCancelBtn" onclick="cancelExport()">取消</button>
+  </div>
+</div>
+
 <script>
 let keyframes = [];
 let selectedId = null;
 let lastScreenshotDataUrl = null;
+let exportCancelled = false;
 
 const video = document.getElementById('video');
 const placeholder = document.getElementById('placeholder');
@@ -221,6 +257,9 @@ const currentTimeEl = document.getElementById('currentTime');
 const durationEl = document.getElementById('duration');
 const volumeSlider = document.getElementById('volumeSlider');
 const speedSelect = document.getElementById('speedSelect');
+const videoSubtitle = document.getElementById('videoSubtitle');
+const subtitleTitle = document.getElementById('subtitleTitle');
+const subtitleDesc = document.getElementById('subtitleDesc');
 
 // === File Input (hidden, triggered by JS) ===
 const videoFileInput = document.createElement('input');
@@ -302,6 +341,7 @@ video.addEventListener('timeupdate', function() {
   progressFill.style.width = pct + '%';
   progressThumb.style.left = pct + '%';
   currentTimeEl.textContent = formatTime(video.currentTime);
+  updateSubtitle();
 });
 
 video.addEventListener('play', function() { playBtn.textContent = '⏸'; });
@@ -329,6 +369,7 @@ document.addEventListener('keydown', function(e) {
     case '[': prevKeyframe(); break;
     case ']': nextKeyframe(); break;
     case 's': case 'S': takeScreenshot(); break;
+    case 'e': case 'E': exportVideo(); break;
     case 'ArrowLeft': e.preventDefault(); skipTime(-5); break;
     case 'ArrowRight': e.preventDefault(); skipTime(5); break;
     case ',': skipTime(-1/30); break;
@@ -488,6 +529,35 @@ function copyScreenshot() {
 function closeModal() { document.getElementById('screenshotModal').classList.remove('show'); }
 document.getElementById('screenshotModal').addEventListener('click', function(e) { if (e.target === e.currentTarget) closeModal(); });
 
+// Subtitle overlay
+var SUBTITLE_RANGE = 3; // show subtitle within ±3 seconds of keyframe
+
+function updateSubtitle() {
+  if (!keyframes.length || !video.duration) {
+    videoSubtitle.classList.remove('show');
+    return;
+  }
+  var t = video.currentTime;
+  var nearest = null;
+  var minDist = Infinity;
+  for (var i = 0; i < keyframes.length; i++) {
+    var dist = Math.abs(keyframes[i].time - t);
+    if (dist < minDist) { minDist = dist; nearest = keyframes[i]; }
+  }
+  if (nearest && minDist <= SUBTITLE_RANGE) {
+    subtitleTitle.textContent = nearest.title;
+    if (nearest.desc) {
+      subtitleDesc.textContent = nearest.desc;
+      subtitleDesc.style.display = 'inline-block';
+    } else {
+      subtitleDesc.style.display = 'none';
+    }
+    videoSubtitle.classList.add('show');
+  } else {
+    videoSubtitle.classList.remove('show');
+  }
+}
+
 // Export
 function exportData() {
   var data = { version: 1, keyframes: keyframes.map(function(k) { return { time: k.time, title: k.title, desc: k.desc, screenshot: k.screenshot }; }) };
@@ -497,6 +567,174 @@ function exportData() {
   a.download = 'keyframes_' + new Date().toISOString().slice(0,10) + '.json';
   a.click();
   showToast('已导出 ' + keyframes.length + ' 个关键帧');
+}
+
+function cancelExport() { exportCancelled = true; }
+
+function exportVideo() {
+  if (!video.duration) { showToast('请先加载视频'); return; }
+  if (!window.MediaRecorder) { showToast('浏览器不支持 MediaRecorder'); return; }
+
+  var exportOverlay = document.getElementById('exportOverlay');
+  var exportProgressFill = document.getElementById('exportProgressFill');
+  var exportStatus = document.getElementById('exportStatus');
+  var exportCancelBtn = document.getElementById('exportCancelBtn');
+  exportCancelled = false;
+
+  exportOverlay.classList.add('show');
+  exportProgressFill.style.width = '0%';
+  exportStatus.textContent = '准备中...';
+  exportCancelBtn.style.display = 'inline-block';
+
+  var canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  var ctx = canvas.getContext('2d');
+
+  var stream = canvas.captureStream(30);
+
+  // Add audio track if available
+  if (video.captureStream) {
+    var videoStream = video.captureStream();
+    var audioTracks = videoStream.getAudioTracks();
+    if (audioTracks.length > 0) stream.addTrack(audioTracks[0]);
+  }
+
+  var mimeType = 'video/webm;codecs=vp9,opus';
+  if (!MediaRecorder.isTypeSupported(mimeType)) {
+    mimeType = 'video/webm;codecs=vp8,opus';
+    if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = 'video/webm';
+  }
+
+  var recorder = new MediaRecorder(stream, { mimeType: mimeType, videoBitsPerSecond: 5000000 });
+  var chunks = [];
+  recorder.ondataavailable = function(e) { if (e.data.size > 0) chunks.push(e.data); };
+  recorder.onstop = function() {
+    if (exportCancelled) {
+      exportOverlay.classList.remove('show');
+      showToast('已取消导出');
+      return;
+    }
+    var blob = new Blob(chunks, { type: 'video/webm' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'keyframe_video_' + new Date().toISOString().slice(0,10) + '.webm';
+    a.click();
+    URL.revokeObjectURL(url);
+    exportOverlay.classList.remove('show');
+    showToast('视频导出完成');
+  };
+
+  // Save original state
+  var origTime = video.currentTime;
+  var origPaused = video.paused;
+  var origRate = video.playbackRate;
+  video.pause();
+  video.currentTime = 0;
+
+  var startRecording = function() {
+    video.playbackRate = 1;
+    recorder.start();
+    video.play();
+    renderFrame();
+  };
+
+  if (video.readyState >= 2) {
+    startRecording();
+  } else {
+    video.addEventListener('loadeddata', startRecording, { once: true });
+    video.load();
+  }
+
+  var renderFrame = function() {
+    if (exportCancelled) {
+      recorder.stop();
+      video.pause();
+      video.currentTime = origTime;
+      video.playbackRate = origRate;
+      if (!origPaused) video.play();
+      return;
+    }
+
+    // Draw video frame
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    // Find nearest keyframe
+    var t = video.currentTime;
+    var nearest = null;
+    var minDist = Infinity;
+    for (var i = 0; i < keyframes.length; i++) {
+      var dist = Math.abs(keyframes[i].time - t);
+      if (dist < minDist) { minDist = dist; nearest = keyframes[i]; }
+    }
+
+    // Draw subtitle if in range
+    if (nearest && minDist <= SUBTITLE_RANGE) {
+      var title = nearest.title;
+      var desc = nearest.desc || '';
+      var cx = canvas.width / 2;
+      var bottomY = canvas.height - 80;
+
+      // Title background
+      ctx.font = 'bold ' + Math.round(canvas.height * 0.04) + 'px sans-serif';
+      var titleW = ctx.measureText(title).width + 40;
+      var titleH = canvas.height * 0.06;
+      var titleX = cx - titleW / 2;
+      var titleY = bottomY - titleH;
+      ctx.fillStyle = 'rgba(233, 69, 96, 0.9)';
+      roundRect(ctx, titleX, titleY, titleW, titleH, 8);
+      ctx.fill();
+      // Title text
+      ctx.fillStyle = '#fff';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(title, cx, titleY + titleH / 2);
+
+      // Description
+      if (desc) {
+        ctx.font = Math.round(canvas.height * 0.028) + 'px sans-serif';
+        var descW = ctx.measureText(desc).width + 24;
+        var descH = canvas.height * 0.045;
+        var descX = cx - descW / 2;
+        var descY = titleY + titleH + 8;
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+        roundRect(ctx, descX, descY, descW, descH, 6);
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.fillText(desc, cx, descY + descH / 2);
+      }
+    }
+
+    // Progress
+    var pct = (video.currentTime / video.duration) * 100;
+    exportProgressFill.style.width = pct.toFixed(1) + '%';
+    exportStatus.textContent = '导出中... ' + formatTime(video.currentTime) + ' / ' + formatTime(video.duration);
+
+    if (video.currentTime >= video.duration - 0.1) {
+      recorder.stop();
+      video.pause();
+      video.currentTime = origTime;
+      video.playbackRate = origRate;
+      if (!origPaused) video.play();
+    } else {
+      requestAnimationFrame(renderFrame);
+    }
+  };
+
+  function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+  }
 }
 
 // Helpers
