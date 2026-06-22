@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>视频关键帧标注工具</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #1a1a2e; color: #e0e0e0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+.header { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; background: #16213e; border-bottom: 1px solid #0f3460; flex-shrink: 0; }
+.header h1 { font-size: 16px; font-weight: 600; color: #e94560; }
+.header-actions { display: flex; gap: 8px; }
+.header-actions button { padding: 5px 12px; border: 1px solid #0f3460; background: #16213e; color: #e0e0e0; border-radius: 4px; cursor: pointer; font-size: 12px; transition: all 0.2s; }
+.header-actions button:hover { background: #0f3460; border-color: #e94560; }
+
+.main { display: flex; flex: 1; overflow: hidden; }
+
+.video-area { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.video-container { flex: 1; background: #000; display: flex; align-items: center; justify-content: center; position: relative; min-height: 0; }
+.video-container video { max-width: 100%; max-height: 100%; display: block; }
+.video-placeholder { color: #555; font-size: 14px; text-align: center; }
+.video-placeholder .open-btn { display: inline-block; padding: 14px 28px; border: 2px dashed #444; border-radius: 8px; cursor: pointer; margin-top: 12px; transition: all 0.2s; background: none; color: #555; font-size: 14px; font-family: inherit; }
+.video-placeholder .open-btn:hover { border-color: #e94560; color: #e94560; }
+
+.timeline-wrapper { padding: 8px 16px; background: #16213e; flex-shrink: 0; }
+.progress-bar-container { position: relative; height: 28px; cursor: pointer; margin-bottom: 6px; }
+.progress-bar-bg { position: absolute; top: 10px; left: 0; right: 0; height: 8px; background: #0a0a1a; border-radius: 4px; overflow: visible; }
+.progress-bar-fill { position: absolute; top: 10px; left: 0; height: 8px; background: linear-gradient(90deg, #e94560, #c23152); border-radius: 4px; width: 0%; pointer-events: none; }
+.progress-bar-thumb { position: absolute; top: 6px; width: 16px; height: 16px; background: #fff; border-radius: 50%; transform: translateX(-50%); left: 0%; pointer-events: none; box-shadow: 0 0 4px rgba(0,0,0,0.5); z-index: 2; }
+.keyframe-marker { position: absolute; top: 4px; width: 4px; height: 20px; background: #ffd700; border-radius: 2px; transform: translateX(-50%); z-index: 1; cursor: pointer; transition: background 0.2s; }
+.keyframe-marker:hover { background: #ffaa00; height: 24px; top: 2px; }
+.time-display { display: flex; justify-content: space-between; font-size: 11px; color: #888; font-variant-numeric: tabular-nums; }
+
+.controls { display: flex; align-items: center; gap: 6px; padding: 6px 16px 10px; background: #16213e; flex-shrink: 0; }
+.controls button { width: 32px; height: 32px; border: none; background: #0f3460; color: #e0e0e0; border-radius: 4px; cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
+.controls button:hover { background: #e94560; }
+.add-kf-btn { width: auto !important; padding: 0 10px !important; font-size: 12px !important; gap: 4px; }
+.add-kf-btn span { font-size: 14px; }
+.screenshot-btn { width: auto !important; padding: 0 10px !important; font-size: 12px !important; margin-left: auto; }
+.volume-group { display: flex; align-items: center; gap: 4px; margin-left: 8px; }
+.volume-group input[type="range"] { width: 60px; accent-color: #e94560; }
+.speed-select { background: #0f3460; color: #e0e0e0; border: 1px solid #1a1a2e; border-radius: 4px; padding: 2px 4px; font-size: 11px; }
+
+.sidebar { width: 320px; background: #16213e; border-left: 1px solid #0f3460; display: flex; flex-direction: column; flex-shrink: 0; }
+.sidebar-header { padding: 10px 12px; border-bottom: 1px solid #0f3460; font-size: 13px; font-weight: 600; color: #e94560; display: flex; justify-content: space-between; align-items: center; }
+.kf-count { font-size: 11px; color: #888; font-weight: normal; }
+.kf-list { flex: 1; overflow-y: auto; padding: 6px; }
+.kf-list:empty::after { content: '暂无关键帧，按 K 或点击按钮添加'; display: block; text-align: center; color: #555; padding: 40px 16px; font-size: 12px; }
+.kf-item { padding: 8px 10px; border-radius: 6px; cursor: pointer; margin-bottom: 4px; border: 1px solid transparent; transition: all 0.15s; position: relative; }
+.kf-item:hover { background: #1a1a3e; border-color: #0f3460; }
+.kf-item.active { background: #0f3460; border-color: #e94560; }
+.kf-item-time { font-size: 11px; color: #e94560; font-variant-numeric: tabular-nums; margin-bottom: 2px; }
+.kf-item-title { font-size: 13px; font-weight: 500; color: #e0e0e0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kf-item-desc { font-size: 11px; color: #888; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kf-item-actions { position: absolute; top: 6px; right: 6px; display: none; gap: 4px; }
+.kf-item:hover .kf-item-actions { display: flex; }
+.kf-item-actions button { width: 22px; height: 22px; border: none; background: #1a1a2e; color: #aaa; border-radius: 3px; cursor: pointer; font-size: 11px; display: flex; align-items: center; justify-content: center; }
+.kf-item-actions button:hover { background: #e94560; color: #fff; }
+
+.edit-panel { border-top: 1px solid #0f3460; padding: 10px; flex-shrink: 0; }
+.edit-panel.hidden { display: none; }
+.edit-panel label { font-size: 11px; color: #888; display: block; margin-bottom: 3px; }
+.edit-panel input, .edit-panel textarea { width: 100%; background: #0a0a1a; border: 1px solid #0f3460; color: #e0e0e0; border-radius: 4px; padding: 6px 8px; font-size: 12px; font-family: inherit; resize: vertical; outline: none; transition: border-color 0.2s; }
+.edit-panel input:focus, .edit-panel textarea:focus { border-color: #e94560; }
+.edit-panel textarea { height: 60px; margin-bottom: 8px; }
+.edit-panel input { margin-bottom: 6px; }
+.edit-btns { display: flex; gap: 6px; }
+.edit-btns button { flex: 1; padding: 6px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; transition: all 0.2s; }
+.btn-save { background: #e94560; color: #fff; }
+.btn-save:hover { background: #c23152; }
+.btn-delete { background: #333; color: #ccc; }
+.btn-delete:hover { background: #c23152; color: #fff; }
+.btn-screenshot { background: #0f3460; color: #e0e0e0; }
+.btn-screenshot:hover { background: #1a4a8a; }
+
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: none; align-items: center; justify-content: center; z-index: 100; }
+.modal-overlay.show { display: flex; }
+.modal { background: #16213e; border: 1px solid #0f3460; border-radius: 8px; padding: 16px; max-width: 80vw; max-height: 80vh; }
+.modal h3 { font-size: 14px; color: #e94560; margin-bottom: 10px; }
+.modal img { max-width: 100%; max-height: 60vh; display: block; border-radius: 4px; }
+.modal-actions { margin-top: 10px; display: flex; gap: 8px; justify-content: flex-end; }
+.modal-actions button { padding: 6px 14px; border: 1px solid #0f3460; background: #1a1a2e; color: #e0e0e0; border-radius: 4px; cursor: pointer; font-size: 12px; }
+.modal-actions button:first-child { background: #e94560; border-color: #e94560; color: #fff; }
+.modal-actions button:hover { opacity: 0.85; }
+
+.toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #e94560; color: #fff; padding: 8px 20px; border-radius: 6px; font-size: 12px; z-index: 200; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+.toast.show { opacity: 1; }
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #0f3460; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #e94560; }
+
+.kb-hints { padding: 6px 16px; background: #0a0a1a; font-size: 10px; color: #555; display: flex; gap: 12px; flex-shrink: 0; flex-wrap: wrap; }
+.kb-hints kbd { background: #1a1a2e; padding: 1px 5px; border-radius: 3px; border: 1px solid #333; font-family: inherit; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🎬 视频关键帧标注工具</h1>
+  <div class="header-actions">
+    <button id="importBtn">📂 导入标注</button>
+    <button onclick="exportData()">💾 导出标注</button>
+  </div>
+</div>
+
+<div class="main">
+  <div class="video-area">
+    <div class="video-container" id="videoContainer">
+      <div class="video-placeholder" id="placeholder">
+        <div>将视频文件拖放到此处</div>
+        <button class="open-btn" id="openVideoBtn">📁 选择视频文件</button>
+      </div>
+      <video id="video" style="display:none"></video>
+    </div>
+
+    <div class="timeline-wrapper">
+      <div class="progress-bar-container" id="progressBar">
+        <div class="progress-bar-bg"></div>
+        <div class="progress-bar-fill" id="progressFill"></div>
+        <div class="progress-bar-thumb" id="progressThumb"></div>
+        <div id="kfMarkers"></div>
+      </div>
+      <div class="time-display">
+        <span id="currentTime">00:00.000</span>
+        <span id="duration">00:00.000</span>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button onclick="skipTime(-5)" title="后退5秒">⏪</button>
+      <button onclick="prevKeyframe()" title="上一个关键帧 [">⏮</button>
+      <button id="playBtn" onclick="togglePlay()" title="播放/暂停 [Space]">▶</button>
+      <button onclick="nextKeyframe()" title="下一个关键帧 ]">⏭</button>
+      <button onclick="skipTime(5)" title="前进5秒">⏩</button>
+      <button class="add-kf-btn" onclick="addKeyframe()" title="添加关键帧 [K]">
+        <span>📌</span> 添加关键帧
+      </button>
+      <button class="screenshot-btn" onclick="takeScreenshot()" title="截图 [S]">
+        📸 截图
+      </button>
+      <div class="volume-group">
+        <span style="font-size:12px">🔊</span>
+        <input type="range" id="volumeSlider" min="0" max="1" step="0.05" value="1">
+      </div>
+      <select class="speed-select" id="speedSelect" title="播放速度">
+        <option value="0.25">0.25x</option>
+        <option value="0.5">0.5x</option>
+        <option value="0.75">0.75x</option>
+        <option value="1" selected>1x</option>
+        <option value="1.25">1.25x</option>
+        <option value="1.5">1.5x</option>
+        <option value="2">2x</option>
+      </select>
+    </div>
+
+    <div class="kb-hints">
+      <span><kbd>Space</kbd> 播放/暂停</span>
+      <span><kbd>K</kbd> 添加关键帧</span>
+      <span><kbd>[</kbd><kbd>]</kbd> 前后跳转</span>
+      <span><kbd>S</kbd> 截图</span>
+      <span><kbd>←</kbd><kbd>→</kbd> 快进/退5秒</span>
+      <span><kbd>,</kbd><kbd>.</kbd> 逐帧</span>
+    </div>
+  </div>
+
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <span>📋 关键帧列表</span>
+      <span class="kf-count" id="kfCount">0 个</span>
+    </div>
+    <div class="kf-list" id="kfList"></div>
+    <div class="edit-panel hidden" id="editPanel">
+      <label>标题</label>
+      <input type="text" id="editTitle" placeholder="输入关键帧标题...">
+      <label>描述</label>
+      <textarea id="editDesc" placeholder="输入详细描述..."></textarea>
+      <div class="edit-btns">
+        <button class="btn-save" onclick="saveEdit()">💾 保存</button>
+        <button class="btn-screenshot" onclick="takeScreenshot()">📸 截图</button>
+        <button class="btn-delete" onclick="deleteSelected()">🗑 删除</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="screenshotModal">
+  <div class="modal">
+    <h3>📸 关键帧截图</h3>
+    <img id="screenshotImg" src="" alt="screenshot">
+    <div class="modal-actions">
+      <button onclick="downloadScreenshot()">💾 下载 PNG</button>
+      <button onclick="copyScreenshot()">📋 复制到剪贴板</button>
+      <button onclick="closeModal()">关闭</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let keyframes = [];
+let selectedId = null;
+let lastScreenshotDataUrl = null;
+
+const video = document.getElementById('video');
+const placeholder = document.getElementById('placeholder');
+const playBtn = document.getElementById('playBtn');
+const progressFill = document.getElementById('progressFill');
+const progressThumb = document.getElementById('progressThumb');
+const progressBar = document.getElementById('progressBar');
+const kfMarkers = document.getElementById('kfMarkers');
+const kfList = document.getElementById('kfList');
+const kfCount = document.getElementById('kfCount');
+const editPanel = document.getElementById('editPanel');
+const editTitle = document.getElementById('editTitle');
+const editDesc = document.getElementById('editDesc');
+const currentTimeEl = document.getElementById('currentTime');
+const durationEl = document.getElementById('duration');
+const volumeSlider = document.getElementById('volumeSlider');
+const speedSelect = document.getElementById('speedSelect');
+
+// === File Input (hidden, triggered by JS) ===
+const videoFileInput = document.createElement('input');
+videoFileInput.type = 'file';
+videoFileInput.accept = 'video/mp4,video/webm,video/ogg';
+videoFileInput.style.display = 'none';
+document.body.appendChild(videoFileInput);
+
+videoFileInput.addEventListener('change', function() {
+  if (this.files && this.files[0]) {
+    loadVideo(this.files[0]);
+  }
+});
+
+document.getElementById('openVideoBtn').addEventListener('click', function(e) {
+  e.preventDefault();
+  videoFileInput.click();
+});
+
+// Import JSON (same approach)
+const importFileInput = document.createElement('input');
+importFileInput.type = 'file';
+importFileInput.accept = '.json';
+importFileInput.style.display = 'none';
+document.body.appendChild(importFileInput);
+
+importFileInput.addEventListener('change', function() {
+  const file = this.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function() {
+    try {
+      const data = JSON.parse(reader.result);
+      if (data.keyframes && Array.isArray(data.keyframes)) {
+        keyframes = data.keyframes.map(function(k, i) { return { id: Date.now() + i, time: k.time, title: k.title, desc: k.desc || '', screenshot: k.screenshot || null }; });
+        keyframes.sort(function(a, b) { return a.time - b.time; });
+        selectedId = null;
+        editPanel.classList.add('hidden');
+        renderAll();
+        showToast('已导入 ' + keyframes.length + ' 个关键帧');
+      }
+    } catch(err) { showToast('导入失败：文件格式错误'); }
+  };
+  reader.readAsText(file);
+  this.value = '';
+});
+
+document.getElementById('importBtn').addEventListener('click', function() {
+  importFileInput.click();
+});
+
+// Drag & drop
+const videoContainer = document.getElementById('videoContainer');
+videoContainer.addEventListener('dragover', function(e) { e.preventDefault(); videoContainer.style.outline = '2px solid #e94560'; });
+videoContainer.addEventListener('dragleave', function() { videoContainer.style.outline = 'none'; });
+videoContainer.addEventListener('drop', function(e) {
+  e.preventDefault();
+  videoContainer.style.outline = 'none';
+  const f = e.dataTransfer.files[0];
+  if (f && f.type.startsWith('video/')) loadVideo(f);
+});
+
+function loadVideo(file) {
+  const url = URL.createObjectURL(file);
+  video.src = url;
+  video.style.display = 'block';
+  placeholder.style.display = 'none';
+  video.load();
+  showToast('已加载: ' + file.name);
+}
+
+// Video events
+video.addEventListener('loadedmetadata', function() {
+  durationEl.textContent = formatTime(video.duration);
+});
+
+video.addEventListener('timeupdate', function() {
+  var pct = (video.currentTime / video.duration) * 100;
+  progressFill.style.width = pct + '%';
+  progressThumb.style.left = pct + '%';
+  currentTimeEl.textContent = formatTime(video.currentTime);
+});
+
+video.addEventListener('play', function() { playBtn.textContent = '⏸'; });
+video.addEventListener('pause', function() { playBtn.textContent = '▶'; });
+
+progressBar.addEventListener('click', function(e) {
+  if (!video.duration) return;
+  var rect = progressBar.getBoundingClientRect();
+  var pct = (e.clientX - rect.left) / rect.width;
+  video.currentTime = pct * video.duration;
+});
+
+volumeSlider.addEventListener('input', function() { video.volume = volumeSlider.value; });
+speedSelect.addEventListener('change', function() { video.playbackRate = parseFloat(speedSelect.value); });
+
+function togglePlay() { if (!video.src) return; video.paused ? video.play() : video.pause(); }
+function skipTime(s) { if (video.src) video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + s)); }
+
+// Keyboard
+document.addEventListener('keydown', function(e) {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  switch(e.key) {
+    case ' ': e.preventDefault(); togglePlay(); break;
+    case 'k': case 'K': addKeyframe(); break;
+    case '[': prevKeyframe(); break;
+    case ']': nextKeyframe(); break;
+    case 's': case 'S': takeScreenshot(); break;
+    case 'ArrowLeft': e.preventDefault(); skipTime(-5); break;
+    case 'ArrowRight': e.preventDefault(); skipTime(5); break;
+    case ',': skipTime(-1/30); break;
+    case '.': skipTime(1/30); break;
+    case 'Delete': case 'Backspace': if (selectedId) deleteSelected(); break;
+  }
+});
+
+// Keyframe CRUD
+function addKeyframe() {
+  if (!video.duration) { showToast('请先加载视频'); return; }
+  var t = video.currentTime;
+  if (keyframes.some(function(k) { return Math.abs(k.time - t) < 0.1; })) { showToast('该位置已有关键帧'); return; }
+  var kf = { id: Date.now(), time: t, title: '关键帧 ' + formatTime(t), desc: '', screenshot: null };
+  keyframes.push(kf);
+  keyframes.sort(function(a, b) { return a.time - b.time; });
+  renderAll();
+  selectKeyframe(kf.id);
+  showToast('已添加关键帧 @ ' + formatTime(t));
+}
+
+function deleteSelected() {
+  if (!selectedId) return;
+  keyframes = keyframes.filter(function(k) { return k.id !== selectedId; });
+  selectedId = null;
+  editPanel.classList.add('hidden');
+  renderAll();
+  showToast('已删除关键帧');
+}
+
+function saveEdit() {
+  var kf = keyframes.find(function(k) { return k.id === selectedId; });
+  if (!kf) return;
+  kf.title = editTitle.value.trim() || kf.title;
+  kf.desc = editDesc.value;
+  renderAll();
+  showToast('已保存');
+}
+
+function selectKeyframe(id) {
+  selectedId = id;
+  var kf = keyframes.find(function(k) { return k.id === id; });
+  if (kf) {
+    editPanel.classList.remove('hidden');
+    editTitle.value = kf.title;
+    editDesc.value = kf.desc;
+    video.currentTime = kf.time;
+  }
+  renderList();
+}
+
+function prevKeyframe() {
+  if (!keyframes.length) return;
+  var t = video.currentTime - 0.1;
+  var prev = null;
+  for (var i = keyframes.length - 1; i >= 0; i--) { if (keyframes[i].time < t) { prev = keyframes[i]; break; } }
+  selectKeyframe(prev ? prev.id : keyframes[keyframes.length - 1].id);
+}
+
+function nextKeyframe() {
+  if (!keyframes.length) return;
+  var t = video.currentTime + 0.1;
+  var next = null;
+  for (var i = 0; i < keyframes.length; i++) { if (keyframes[i].time > t) { next = keyframes[i]; break; } }
+  selectKeyframe(next ? next.id : keyframes[0].id);
+}
+
+// Render
+function renderAll() { renderMarkers(); renderList(); }
+
+function renderMarkers() {
+  kfMarkers.innerHTML = '';
+  if (!video.duration) return;
+  keyframes.forEach(function(kf) {
+    var m = document.createElement('div');
+    m.className = 'keyframe-marker';
+    m.style.left = ((kf.time / video.duration) * 100) + '%';
+    m.title = formatTime(kf.time) + ' - ' + kf.title;
+    m.addEventListener('click', function(e) { e.stopPropagation(); selectKeyframe(kf.id); });
+    kfMarkers.appendChild(m);
+  });
+}
+
+function renderList() {
+  kfList.innerHTML = '';
+  kfCount.textContent = keyframes.length + ' 个';
+  keyframes.forEach(function(kf) {
+    var div = document.createElement('div');
+    div.className = 'kf-item' + (kf.id === selectedId ? ' active' : '');
+    var html = '<div class="kf-item-time">' + formatTime(kf.time) + (kf.screenshot ? ' 📸' : '') + '</div>';
+    html += '<div class="kf-item-title">' + esc(kf.title) + '</div>';
+    if (kf.desc) html += '<div class="kf-item-desc">' + esc(kf.desc) + '</div>';
+    html += '<div class="kf-item-actions">';
+    html += '<button data-action="jump" data-id="' + kf.id + '" title="跳转">🎯</button>';
+    html += '<button data-action="delete" data-id="' + kf.id + '" title="删除">✕</button>';
+    html += '</div>';
+    div.innerHTML = html;
+    div.addEventListener('click', function() { selectKeyframe(kf.id); });
+    kfList.appendChild(div);
+  });
+
+  // Bind action buttons
+  kfList.querySelectorAll('[data-action]').forEach(function(btn) {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      var id = parseInt(this.getAttribute('data-id'));
+      if (this.getAttribute('data-action') === 'jump') selectKeyframe(id);
+      else deleteKf(id);
+    });
+  });
+}
+
+function deleteKf(id) {
+  keyframes = keyframes.filter(function(k) { return k.id !== id; });
+  if (selectedId === id) { selectedId = null; editPanel.classList.add('hidden'); }
+  renderAll();
+  showToast('已删除');
+}
+
+// Screenshot
+function takeScreenshot() {
+  if (!video.duration) { showToast('请先加载视频'); return; }
+  var canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+  lastScreenshotDataUrl = canvas.toDataURL('image/png');
+
+  if (selectedId) {
+    var kf = keyframes.find(function(k) { return k.id === selectedId; });
+    if (kf) { kf.screenshot = lastScreenshotDataUrl; renderAll(); }
+  }
+
+  document.getElementById('screenshotImg').src = lastScreenshotDataUrl;
+  document.getElementById('screenshotModal').classList.add('show');
+}
+
+function downloadScreenshot() {
+  if (!lastScreenshotDataUrl) return;
+  var a = document.createElement('a');
+  a.href = lastScreenshotDataUrl;
+  a.download = 'keyframe_' + formatTime(video.currentTime).replace(/:/g, '-') + '.png';
+  a.click();
+}
+
+function copyScreenshot() {
+  if (!lastScreenshotDataUrl) return;
+  fetch(lastScreenshotDataUrl)
+    .then(function(r) { return r.blob(); })
+    .then(function(blob) {
+      return navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+    })
+    .then(function() { showToast('已复制到剪贴板'); })
+    .catch(function() { showToast('复制失败，请手动保存'); });
+}
+
+function closeModal() { document.getElementById('screenshotModal').classList.remove('show'); }
+document.getElementById('screenshotModal').addEventListener('click', function(e) { if (e.target === e.currentTarget) closeModal(); });
+
+// Export
+function exportData() {
+  var data = { version: 1, keyframes: keyframes.map(function(k) { return { time: k.time, title: k.title, desc: k.desc, screenshot: k.screenshot }; }) };
+  var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'keyframes_' + new Date().toISOString().slice(0,10) + '.json';
+  a.click();
+  showToast('已导出 ' + keyframes.length + ' 个关键帧');
+}
+
+// Helpers
+function formatTime(s) {
+  if (!s || !isFinite(s)) return '00:00.000';
+  var m = Math.floor(s / 60);
+  var sec = Math.floor(s % 60);
+  var ms = Math.floor((s % 1) * 1000);
+  return (m < 10 ? '0' : '') + m + ':' + (sec < 10 ? '0' : '') + sec + '.' + (ms < 100 ? '0' : '') + (ms < 10 ? '0' : '') + ms;
+}
+
+function esc(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+function showToast(msg) {
+  var t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(function() { t.classList.remove('show'); }, 2000);
+}
+
+renderAll();
+</script>
+</body>
+</html>
