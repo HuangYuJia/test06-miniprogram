@@ -507,14 +507,16 @@ function takeScreenshot() {
 
   // Draw subtitle if in range
   var t = video.currentTime;
-  var nearest = null;
-  var minDist = Infinity;
-  for (var i = 0; i < keyframes.length; i++) {
-    var dist = Math.abs(keyframes[i].time - t);
-    if (dist < minDist) { minDist = dist; nearest = keyframes[i]; }
+  var active = null;
+  for (var i = keyframes.length - 1; i >= 0; i--) {
+    var elapsed = t - keyframes[i].time;
+    if (elapsed >= 0 && elapsed <= SUBTITLE_DURATION) {
+      active = keyframes[i];
+      break;
+    }
   }
-  if (nearest && minDist <= SUBTITLE_RANGE) {
-    drawSubtitleOnCanvas(ctx, canvas, nearest.title, nearest.desc || '');
+  if (active) {
+    drawSubtitleOnCanvas(ctx, canvas, active.title, active.desc || '');
   }
 
   lastScreenshotDataUrl = canvas.toDataURL('image/png');
@@ -599,7 +601,7 @@ function closeModal() { document.getElementById('screenshotModal').classList.rem
 document.getElementById('screenshotModal').addEventListener('click', function(e) { if (e.target === e.currentTarget) closeModal(); });
 
 // Subtitle overlay
-var SUBTITLE_RANGE = 3; // show subtitle within ±3 seconds of keyframe
+var SUBTITLE_DURATION = 4; // show subtitle for 4 seconds after keyframe
 
 function updateSubtitle() {
   if (!keyframes.length || !video.duration) {
@@ -607,16 +609,21 @@ function updateSubtitle() {
     return;
   }
   var t = video.currentTime;
-  var nearest = null;
-  var minDist = Infinity;
-  for (var i = 0; i < keyframes.length; i++) {
-    var dist = Math.abs(keyframes[i].time - t);
-    if (dist < minDist) { minDist = dist; nearest = keyframes[i]; }
+  var active = null;
+
+  // Find keyframe that we just passed (within display duration)
+  for (var i = keyframes.length - 1; i >= 0; i--) {
+    var elapsed = t - keyframes[i].time;
+    if (elapsed >= 0 && elapsed <= SUBTITLE_DURATION) {
+      active = keyframes[i];
+      break;
+    }
   }
-  if (nearest && minDist <= SUBTITLE_RANGE) {
-    subtitleTitle.textContent = nearest.title;
-    if (nearest.desc) {
-      subtitleDesc.textContent = nearest.desc;
+
+  if (active) {
+    subtitleTitle.textContent = active.title;
+    if (active.desc) {
+      subtitleDesc.textContent = active.desc;
       subtitleDesc.style.display = 'inline-block';
     } else {
       subtitleDesc.style.display = 'none';
@@ -794,18 +801,20 @@ function exportVideo() {
     // Draw video frame
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    // Find nearest keyframe
+    // Find active keyframe
     var t = video.currentTime;
-    var nearest = null;
-    var minDist = Infinity;
-    for (var i = 0; i < keyframes.length; i++) {
-      var dist = Math.abs(keyframes[i].time - t);
-      if (dist < minDist) { minDist = dist; nearest = keyframes[i]; }
+    var active = null;
+    for (var i = keyframes.length - 1; i >= 0; i--) {
+      var elapsed = t - keyframes[i].time;
+      if (elapsed >= 0 && elapsed <= SUBTITLE_DURATION) {
+        active = keyframes[i];
+        break;
+      }
     }
 
     // Draw subtitle if in range
-    if (nearest && minDist <= SUBTITLE_RANGE) {
-      drawSubtitleOnCanvas(ctx, canvas, nearest.title, nearest.desc || '');
+    if (active) {
+      drawSubtitleOnCanvas(ctx, canvas, active.title, active.desc || '');
     }
 
     // Progress
