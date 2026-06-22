@@ -44,6 +44,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .screenshot-btn { width: auto !important; padding: 0 10px !important; font-size: 12px !important; margin-left: auto; }
 .export-video-btn { width: auto !important; padding: 0 10px !important; font-size: 12px !important; background: #e94560 !important; color: #fff !important; }
 .export-video-btn:hover { background: #c23152 !important; }
+.batch-export-btn { width: auto !important; padding: 0 10px !important; font-size: 12px !important; background: #0f3460 !important; }
+.batch-export-btn:hover { background: #1a4a8a !important; }
 .volume-group { display: flex; align-items: center; gap: 4px; margin-left: 8px; }
 .volume-group input[type="range"] { width: 60px; accent-color: #e94560; }
 .speed-select { background: #0f3460; color: #e0e0e0; border: 1px solid #1a1a2e; border-radius: 4px; padding: 2px 4px; font-size: 11px; }
@@ -164,6 +166,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       <button class="export-video-btn" onclick="exportVideo()" title="导出带字幕的视频">
         🎬 导出视频
       </button>
+      <button class="batch-export-btn" onclick="batchExportScreenshots()" title="批量导出所有关键帧截图">
+        📦 批量截图
+      </button>
       <div class="volume-group">
         <span style="font-size:12px">🔊</span>
         <input type="range" id="volumeSlider" min="0" max="1" step="0.05" value="1">
@@ -185,6 +190,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       <span><kbd>[</kbd><kbd>]</kbd> 前后跳转</span>
       <span><kbd>S</kbd> 截图</span>
       <span><kbd>E</kbd> 导出视频</span>
+      <span><kbd>B</kbd> 批量截图</span>
       <span><kbd>←</kbd><kbd>→</kbd> 快进/退5秒</span>
       <span><kbd>,</kbd><kbd>.</kbd> 逐帧</span>
     </div>
@@ -370,6 +376,7 @@ document.addEventListener('keydown', function(e) {
     case ']': nextKeyframe(); break;
     case 's': case 'S': takeScreenshot(); break;
     case 'e': case 'E': exportVideo(); break;
+    case 'b': case 'B': batchExportScreenshots(); break;
     case 'ArrowLeft': e.preventDefault(); skipTime(-5); break;
     case 'ArrowRight': e.preventDefault(); skipTime(5); break;
     case ',': skipTime(-1/30); break;
@@ -632,6 +639,73 @@ function exportData() {
 }
 
 function cancelExport() { exportCancelled = true; }
+
+function batchExportScreenshots() {
+  if (!video.duration) { showToast('请先加载视频'); return; }
+  if (!keyframes.length) { showToast('暂无关键帧'); return; }
+
+  var exportOverlay = document.getElementById('exportOverlay');
+  var exportProgressFill = document.getElementById('exportProgressFill');
+  var exportStatus = document.getElementById('exportStatus');
+  var exportCancelBtn = document.getElementById('exportCancelBtn');
+  exportCancelled = false;
+
+  exportOverlay.classList.add('show');
+  exportProgressFill.style.width = '0%';
+  exportStatus.textContent = '准备批量导出...';
+  exportCancelBtn.style.display = 'inline-block';
+
+  var origTime = video.currentTime;
+  var origPaused = video.paused;
+  var sorted = keyframes.slice().sort(function(a, b) { return a.time - b.time; });
+  var index = 0;
+
+  function captureNext() {
+    if (exportCancelled || index >= sorted.length) {
+      video.currentTime = origTime;
+      if (!origPaused) video.play();
+      exportOverlay.classList.remove('show');
+      if (!exportCancelled) showToast('已导出 ' + sorted.length + ' 张截图');
+      else showToast('已取消导出');
+      return;
+    }
+
+    var kf = sorted[index];
+    var pct = ((index + 1) / sorted.length) * 100;
+    exportProgressFill.style.width = pct.toFixed(1) + '%';
+    exportStatus.textContent = '导出中... (' + (index + 1) + '/' + sorted.length + ') ' + kf.title;
+
+    video.pause();
+    video.currentTime = kf.time;
+
+    video.addEventListener('seeked', function onSeeked() {
+      video.removeEventListener('seeked', onSeeked);
+
+      var canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      var ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0);
+
+      // Draw subtitle
+      if (kf.title) {
+        drawSubtitleOnCanvas(ctx, canvas, kf.title, kf.desc || '');
+      }
+
+      // Download
+      var url = canvas.toDataURL('image/png');
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = 'kf_' + String(index + 1).padStart(3, '0') + '_' + formatTime(kf.time).replace(/:/g, '-') + '.png';
+      a.click();
+
+      index++;
+      setTimeout(captureNext, 200); // small delay between downloads
+    }, { once: true });
+  }
+
+  captureNext();
+}
 
 function exportVideo() {
   if (!video.duration) { showToast('请先加载视频'); return; }
