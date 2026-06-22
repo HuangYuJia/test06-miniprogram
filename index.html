@@ -495,7 +495,21 @@ function takeScreenshot() {
   var canvas = document.createElement('canvas');
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
-  canvas.getContext('2d').drawImage(video, 0, 0);
+  var ctx = canvas.getContext('2d');
+  ctx.drawImage(video, 0, 0);
+
+  // Draw subtitle if in range
+  var t = video.currentTime;
+  var nearest = null;
+  var minDist = Infinity;
+  for (var i = 0; i < keyframes.length; i++) {
+    var dist = Math.abs(keyframes[i].time - t);
+    if (dist < minDist) { minDist = dist; nearest = keyframes[i]; }
+  }
+  if (nearest && minDist <= SUBTITLE_RANGE) {
+    drawSubtitleOnCanvas(ctx, canvas, nearest.title, nearest.desc || '');
+  }
+
   lastScreenshotDataUrl = canvas.toDataURL('image/png');
 
   if (selectedId) {
@@ -505,6 +519,54 @@ function takeScreenshot() {
 
   document.getElementById('screenshotImg').src = lastScreenshotDataUrl;
   document.getElementById('screenshotModal').classList.add('show');
+}
+
+function drawSubtitleOnCanvas(ctx, canvas, title, desc) {
+  var cx = canvas.width / 2;
+  var bottomY = canvas.height - 80;
+
+  // Title background
+  ctx.font = 'bold ' + Math.round(canvas.height * 0.04) + 'px sans-serif';
+  var titleW = ctx.measureText(title).width + 40;
+  var titleH = canvas.height * 0.06;
+  var titleX = cx - titleW / 2;
+  var titleY = bottomY - titleH;
+  ctx.fillStyle = 'rgba(233, 69, 96, 0.9)';
+  roundRect(ctx, titleX, titleY, titleW, titleH, 8);
+  ctx.fill();
+  // Title text
+  ctx.fillStyle = '#fff';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(title, cx, titleY + titleH / 2);
+
+  // Description
+  if (desc) {
+    ctx.font = Math.round(canvas.height * 0.028) + 'px sans-serif';
+    var descW = ctx.measureText(desc).width + 24;
+    var descH = canvas.height * 0.045;
+    var descX = cx - descW / 2;
+    var descY = titleY + titleH + 8;
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+    roundRect(ctx, descX, descY, descW, descH, 6);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.fillText(desc, cx, descY + descH / 2);
+  }
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
 }
 
 function downloadScreenshot() {
@@ -671,39 +733,7 @@ function exportVideo() {
 
     // Draw subtitle if in range
     if (nearest && minDist <= SUBTITLE_RANGE) {
-      var title = nearest.title;
-      var desc = nearest.desc || '';
-      var cx = canvas.width / 2;
-      var bottomY = canvas.height - 80;
-
-      // Title background
-      ctx.font = 'bold ' + Math.round(canvas.height * 0.04) + 'px sans-serif';
-      var titleW = ctx.measureText(title).width + 40;
-      var titleH = canvas.height * 0.06;
-      var titleX = cx - titleW / 2;
-      var titleY = bottomY - titleH;
-      ctx.fillStyle = 'rgba(233, 69, 96, 0.9)';
-      roundRect(ctx, titleX, titleY, titleW, titleH, 8);
-      ctx.fill();
-      // Title text
-      ctx.fillStyle = '#fff';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(title, cx, titleY + titleH / 2);
-
-      // Description
-      if (desc) {
-        ctx.font = Math.round(canvas.height * 0.028) + 'px sans-serif';
-        var descW = ctx.measureText(desc).width + 24;
-        var descH = canvas.height * 0.045;
-        var descX = cx - descW / 2;
-        var descY = titleY + titleH + 8;
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
-        roundRect(ctx, descX, descY, descW, descH, 6);
-        ctx.fill();
-        ctx.fillStyle = '#fff';
-        ctx.fillText(desc, cx, descY + descH / 2);
-      }
+      drawSubtitleOnCanvas(ctx, canvas, nearest.title, nearest.desc || '');
     }
 
     // Progress
@@ -721,20 +751,6 @@ function exportVideo() {
       requestAnimationFrame(renderFrame);
     }
   };
-
-  function roundRect(ctx, x, y, w, h, r) {
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.lineTo(x + w - r, y);
-    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-    ctx.lineTo(x + w, y + h - r);
-    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-    ctx.lineTo(x + r, y + h);
-    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-    ctx.lineTo(x, y + r);
-    ctx.quadraticCurveTo(x, y, x + r, y);
-    ctx.closePath();
-  }
 }
 
 // Helpers
