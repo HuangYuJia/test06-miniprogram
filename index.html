@@ -662,11 +662,21 @@ function exportVideo() {
     if (audioTracks.length > 0) stream.addTrack(audioTracks[0]);
   }
 
-  var mimeType = 'video/webm;codecs=vp9,opus';
-  if (!MediaRecorder.isTypeSupported(mimeType)) {
-    mimeType = 'video/webm;codecs=vp8,opus';
-    if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = 'video/webm';
+  var mimeType = '';
+  var fileExt = 'webm';
+  // Try MP4 first (Chrome 120+)
+  var mp4Types = ['video/mp4;codecs=avc1,mp4a', 'video/mp4'];
+  for (var i = 0; i < mp4Types.length; i++) {
+    if (MediaRecorder.isTypeSupported(mp4Types[i])) { mimeType = mp4Types[i]; fileExt = 'mp4'; break; }
   }
+  // Fallback to WebM
+  if (!mimeType) {
+    var webmTypes = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+    for (var i = 0; i < webmTypes.length; i++) {
+      if (MediaRecorder.isTypeSupported(webmTypes[i])) { mimeType = webmTypes[i]; fileExt = 'webm'; break; }
+    }
+  }
+  if (!mimeType) { exportOverlay.classList.remove('show'); showToast('浏览器不支持视频录制'); return; }
 
   var recorder = new MediaRecorder(stream, { mimeType: mimeType, videoBitsPerSecond: 5000000 });
   var chunks = [];
@@ -677,15 +687,15 @@ function exportVideo() {
       showToast('已取消导出');
       return;
     }
-    var blob = new Blob(chunks, { type: 'video/webm' });
+    var blob = new Blob(chunks, { type: mimeType });
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
     a.href = url;
-    a.download = 'keyframe_video_' + new Date().toISOString().slice(0,10) + '.webm';
+    a.download = 'keyframe_video_' + new Date().toISOString().slice(0,10) + '.' + fileExt;
     a.click();
     URL.revokeObjectURL(url);
     exportOverlay.classList.remove('show');
-    showToast('视频导出完成');
+    showToast('视频导出完成 (.' + fileExt + ')');
   };
 
   // Save original state
