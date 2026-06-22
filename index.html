@@ -242,6 +242,19 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 </div>
 
 <script>
+// Load JSZip for batch export
+var jsZipLoaded = false;
+function loadJSZip() {
+  return new Promise(function(resolve, reject) {
+    if (jsZipLoaded && window.JSZip) { resolve(window.JSZip); return; }
+    var s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
+    s.onload = function() { jsZipLoaded = true; resolve(window.JSZip); };
+    s.onerror = function() { reject(new Error('Failed to load JSZip')); };
+    document.head.appendChild(s);
+  });
+}
+
 let keyframes = [];
 let selectedId = null;
 let lastScreenshotDataUrl = null;
@@ -659,59 +672,77 @@ function batchExportScreenshots() {
 
   exportOverlay.classList.add('show');
   exportProgressFill.style.width = '0%';
-  exportStatus.textContent = '准备批量导出...';
+  exportStatus.textContent = '加载压缩库...';
   exportCancelBtn.style.display = 'inline-block';
 
-  var origTime = video.currentTime;
-  var origPaused = video.paused;
-  var sorted = keyframes.slice().sort(function(a, b) { return a.time - b.time; });
-  var index = 0;
+  loadJSZip().then(function(JSZip) {
+    var zip = new JSZip();
+    var origTime = video.currentTime;
+    var origPaused = video.paused;
+    var sorted = keyframes.slice().sort(function(a, b) { return a.time - b.time; });
+    var index = 0;
 
-  function captureNext() {
-    if (exportCancelled || index >= sorted.length) {
-      video.currentTime = origTime;
-      if (!origPaused) video.play();
-      exportOverlay.classList.remove('show');
-      if (!exportCancelled) showToast('已导出 ' + sorted.length + ' 张截图');
-      else showToast('已取消导出');
-      return;
-    }
+    function captureNext() {
+      if (exportCancelled || index >= sorted.length) {
+        video.currentTime = origTime;
+        if (!origPaused) video.play();
 
-    var kf = sorted[index];
-    var pct = ((index + 1) / sorted.length) * 100;
-    exportProgressFill.style.width = pct.toFixed(1) + '%';
-    exportStatus.textContent = '导出中... (' + (index + 1) + '/' + sorted.length + ') ' + kf.title;
-
-    video.pause();
-    video.currentTime = kf.time;
-
-    video.addEventListener('seeked', function onSeeked() {
-      video.removeEventListener('seeked', onSeeked);
-
-      var canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      var ctx = canvas.getContext('2d');
-      ctx.drawImage(video, 0, 0);
-
-      // Draw subtitle
-      if (kf.title) {
-        drawSubtitleOnCanvas(ctx, canvas, kf.title, kf.desc || '');
+        if (!exportCancelled) {
+          exportStatus.textContent = '正在打包...';
+          zip.generateAsync({ type: 'blob' }).then(function(blob) {
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = 'keyframes_' + new Date().toISOString().slice(0,10) + '.zip';
+            a.click();
+            URL.revokeObjectURL(url);
+            exportOverlay.classList.remove('show');
+            showToast('已导出 ' + sorted.length + ' 张截图');
+          });
+        } else {
+          exportOverlay.classList.remove('show');
+          showToast('已取消导出');
+        }
+        return;
       }
 
-      // Download
-      var url = canvas.toDataURL('image/png');
-      var a = document.createElement('a');
-      a.href = url;
-      a.download = 'kf_' + String(index + 1).padStart(3, '0') + '_' + formatTime(kf.time).replace(/:/g, '-') + '.png';
-      a.click();
+      var kf = sorted[index];
+      var pct = ((index + 1) / sorted.length) * 100;
+      exportProgressFill.style.width = pct.toFixed(1) + '%';
+      exportStatus.textContent = '截图中... (' + (index + 1) + '/' + sorted.length + ') ' + kf.title;
 
-      index++;
-      setTimeout(captureNext, 200); // small delay between downloads
-    }, { once: true });
-  }
+      video.pause();
+      video.currentTime = kf.time;
 
-  captureNext();
+      video.addEventListener('seeked', function onSeeked() {
+        video.removeEventListener('seeked', onSeeked);
+
+        var canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        var ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0);
+
+        // Draw subtitle
+        if (kf.title) {
+          drawSubtitleOnCanvas(ctx, canvas, kf.title, kf.desc || '');
+        }
+
+        // Add to zip
+        var fileName = 'kf_' + String(index + 1).padStart(3, '0') + '_' + formatTime(kf.time).replace(/:/g, '-') + '.png';
+        canvas.toBlob(function(blob) {
+          zip.file(fileName, blob);
+          index++;
+          setTimeout(captureNext, 100);
+        }, 'image/png');
+      }, { once: true });
+    }
+
+    captureNext();
+  }).catch(function() {
+    exportOverlay.classList.remove('show');
+    showToast('加载压缩库失败，请检查网络');
+  });
 }
 
 function exportVideo() {
