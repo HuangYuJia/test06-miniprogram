@@ -653,15 +653,6 @@ function exportVideo() {
   canvas.height = video.videoHeight;
   var ctx = canvas.getContext('2d');
 
-  var stream = canvas.captureStream(30);
-
-  // Add audio track if available
-  if (video.captureStream) {
-    var videoStream = video.captureStream();
-    var audioTracks = videoStream.getAudioTracks();
-    if (audioTracks.length > 0) stream.addTrack(audioTracks[0]);
-  }
-
   var mimeType = '';
   var fileExt = 'webm';
   // Try MP4 first (Chrome 120+)
@@ -678,8 +669,26 @@ function exportVideo() {
   }
   if (!mimeType) { exportOverlay.classList.remove('show'); showToast('浏览器不支持视频录制'); return; }
 
-  var recorder = new MediaRecorder(stream, { mimeType: mimeType, videoBitsPerSecond: 5000000 });
+  var recorder;
   var chunks = [];
+
+  // Save original state
+  var origTime = video.currentTime;
+  var origPaused = video.paused;
+  var origRate = video.playbackRate;
+
+  // Use video stream directly (includes audio)
+  var videoStream = video.captureStream ? video.captureStream() : null;
+  var recorderStream = canvas.captureStream(30);
+
+  // Add audio from video if available
+  if (videoStream) {
+    var audioTracks = videoStream.getAudioTracks();
+    if (audioTracks.length > 0) recorderStream.addTrack(audioTracks[0]);
+  }
+
+  // Re-create recorder with combined stream
+  recorder = new MediaRecorder(recorderStream, { mimeType: mimeType, videoBitsPerSecond: 5000000 });
   recorder.ondataavailable = function(e) { if (e.data.size > 0) chunks.push(e.data); };
   recorder.onstop = function() {
     if (exportCancelled) {
@@ -697,27 +706,6 @@ function exportVideo() {
     exportOverlay.classList.remove('show');
     showToast('视频导出完成 (.' + fileExt + ')');
   };
-
-  // Save original state
-  var origTime = video.currentTime;
-  var origPaused = video.paused;
-  var origRate = video.playbackRate;
-  video.pause();
-  video.currentTime = 0;
-
-  var startRecording = function() {
-    video.playbackRate = 1;
-    recorder.start();
-    video.play();
-    renderFrame();
-  };
-
-  if (video.readyState >= 2) {
-    startRecording();
-  } else {
-    video.addEventListener('loadeddata', startRecording, { once: true });
-    video.load();
-  }
 
   var renderFrame = function() {
     if (exportCancelled) {
@@ -750,17 +738,42 @@ function exportVideo() {
     var pct = (video.currentTime / video.duration) * 100;
     exportProgressFill.style.width = pct.toFixed(1) + '%';
     exportStatus.textContent = '导出中... ' + formatTime(video.currentTime) + ' / ' + formatTime(video.duration);
+  };
 
+  var onTimeUpdate = function() {
+    renderFrame();
     if (video.currentTime >= video.duration - 0.1) {
+      video.removeEventListener('timeupdate', onTimeUpdate);
+      video.removeEventListener('ended', onEnded);
       recorder.stop();
       video.pause();
       video.currentTime = origTime;
       video.playbackRate = origRate;
       if (!origPaused) video.play();
-    } else {
-      requestAnimationFrame(renderFrame);
     }
   };
+
+  var onEnded = function() {
+    video.removeEventListener('timeupdate', onTimeUpdate);
+    video.removeEventListener('ended', onEnded);
+    if (recorder.state === 'recording') recorder.stop();
+    video.currentTime = origTime;
+    video.playbackRate = origRate;
+    if (!origPaused) video.play();
+  };
+
+  video.pause();
+  video.currentTime = 0;
+  video.playbackRate = 1;
+
+  video.addEventListener('seeked', function onFirstSeeked() {
+    video.removeEventListener('seeked', onFirstSeeked);
+    recorder.start(100); // collect data every 100ms
+    video.addEventListener('timeupdate', onTimeUpdate);
+    video.addEventListener('ended', onEnded);
+    renderFrame(); // draw first frame
+    video.play();
+  }, { once: true });
 }
 
 // Helpers
